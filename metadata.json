@@ -1,0 +1,8 @@
+{
+  "name": "MarcenariaCAD Pro - Projetos de Móveis Planejados",
+  "description": "Plataforma profissional de CAD/CAM paramétrico para móveis planejados, furação Sistema 32, fitas de borda, plano de corte otimizado, orçamento e exportação para fabricação.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
