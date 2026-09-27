@@ -8,7 +8,7 @@ import React from 'react';
 import { Piece, EdgePosition } from '../../types/furniture';
 import { BoardMaterial, EdgeTapeMaterial } from '../../types/materials';
 import { generatePieceDXF, generatePieceGCode } from '../../engine/cncExporter';
-import { X, Download, FileCode, Check, AlertCircle } from 'lucide-react';
+import { X, Download, FileCode, Check, AlertCircle, Trash2, RotateCcw } from 'lucide-react';
 
 interface PieceInspectorProps {
   piece: Piece | null;
@@ -87,6 +87,20 @@ export const PieceInspector: React.FC<PieceInspectorProps> = ({
     a.download = `${piece.code}.nc`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleRemoveDrilling = (drillId: string) => {
+    onUpdatePiece({
+      ...piece,
+      drillings: piece.drillings.filter(d => d.id !== drillId)
+    });
+  };
+
+  const handleClearAllDrillings = () => {
+    onUpdatePiece({
+      ...piece,
+      drillings: []
+    });
   };
 
   // Determine natural orientation of piece for 2D orthographic drawing
@@ -385,22 +399,39 @@ export const PieceInspector: React.FC<PieceInspectorProps> = ({
 
       {/* Drillings Schedule */}
       <div className="mt-4">
-        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-          Usinagens & Furações ({piece.drillings.length})
-        </h4>
-        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            Usinagens & Furações ({piece.drillings.length})
+          </h4>
+          {piece.drillings.length > 0 ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+              100% Otimizado
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+              Peça Virgem
+            </span>
+          )}
+        </div>
+        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
           {piece.drillings.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">Nenhuma furação necessária para esta peça.</p>
+            <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800 text-center">
+              <p className="text-xs text-slate-400 font-medium">Nenhuma furação necessária para esta peça.</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">A peça permanece íntegra sem furos que enfraqueçam o material.</p>
+            </div>
           ) : (
             piece.drillings.map((d, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] p-2 bg-slate-950/60 rounded border border-slate-800/80">
-                <div>
-                  <span className="font-medium text-slate-200">{d.name}</span>
-                  <div className="text-slate-400 font-mono">
-                    Ø{d.diameter} mm · Prof: {d.depth} mm
+                <div className="max-w-[200px]">
+                  <div className="font-medium text-slate-200 truncate">{d.name}</div>
+                  <div className="text-slate-400 font-mono text-[10px]">
+                    Ø{d.diameter} mm · Prof: {d.depth > 0 ? `${d.depth} mm` : 'Passante'} · Face: {d.face}
                   </div>
+                  {d.description && (
+                    <div className="text-[9px] text-emerald-400/90 truncate">{d.description}</div>
+                  )}
                 </div>
-                <span className="font-mono text-slate-400 text-[10px]">
+                <span className="font-mono text-cyan-400 text-[10px] shrink-0 font-semibold">
                   X:{d.x} Y:{d.y}
                 </span>
               </div>

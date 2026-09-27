@@ -21,7 +21,7 @@ import { optimizeCuttingPlan } from './engine/cuttingOptimizer';
 import { calculateQuotation, DEFAULT_QUOTATION_CONFIG } from './engine/quotationEngine';
 import { validateFabricationRules, FabricationDiagnostic } from './engine/ruleValidator';
 import { generateCuttingListCSV } from './engine/cncExporter';
-import { createInitialProject, saveProject, createNewProjectVersion } from './services/storage';
+import { createInitialProject, saveProject, createNewProjectVersion, StoredCustomTemplate } from './services/storage';
 import { executeAICommandOnFurniture, InterpretedFurnitureProposal } from './services/geminiAI';
 
 // Layout & Viewport Components
@@ -43,6 +43,9 @@ import { ValidationTab } from './components/tabs/ValidationTab';
 import { AIModal } from './components/modals/AIModal';
 import { ExportPackageModal } from './components/modals/ExportPackageModal';
 import { ProjectModal } from './components/modals/ProjectModal';
+import { CreateFromPiecesListModal } from './components/modals/CreateFromPiecesListModal';
+import { CreateFromClientOrderModal } from './components/modals/CreateFromClientOrderModal';
+import { SaveModelModal } from './components/modals/SaveModelModal';
 import { ArrowLeft, RotateCw, DoorOpen, Sparkles, Eye, Check } from 'lucide-react';
 
 export default function App() {
@@ -82,6 +85,9 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [isPiecesListModalOpen, setIsPiecesListModalOpen] = useState(false);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isSaveModelModalOpen, setIsSaveModelModalOpen] = useState(false);
 
   // Toast / Status Message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -284,9 +290,14 @@ export default function App() {
     }
   };
 
-  // Template Loader
-  const handleLoadTemplate = (template: FurnitureTemplate) => {
-    const newModel = template.create();
+  // Template Loader (Supports standard templates and custom saved models)
+  const handleLoadTemplate = (template: FurnitureTemplate | StoredCustomTemplate) => {
+    let newModel: FurnitureModel;
+    if ('furnitureSnapshot' in template) {
+      newModel = recalculateFurnitureModel(JSON.parse(JSON.stringify(template.furnitureSnapshot)));
+    } else {
+      newModel = template.create();
+    }
     setUndoStack(prev => [...prev, project.furniture]);
     setRedoStack([]);
     setProject(prev => ({
@@ -296,6 +307,34 @@ export default function App() {
     }));
     setActiveTab('3d');
     showToast(`Modelo "${template.name}" carregado.`);
+  };
+
+  // Generate model from pieces list
+  const handleGenerateFromPiecesList = (newModel: FurnitureModel, modelName: string) => {
+    const recalculated = recalculateFurnitureModel(newModel);
+    setUndoStack(prev => [...prev, project.furniture]);
+    setRedoStack([]);
+    setProject(prev => ({
+      ...prev,
+      name: modelName,
+      furniture: recalculated
+    }));
+    setActiveTab('3d');
+    showToast(`Móvel montado com sucesso a partir da lista de peças!`);
+  };
+
+  // Generate model from client order description
+  const handleGenerateFromOrder = (newModel: FurnitureModel, orderTitle: string) => {
+    const recalculated = recalculateFurnitureModel(newModel);
+    setUndoStack(prev => [...prev, project.furniture]);
+    setRedoStack([]);
+    setProject(prev => ({
+      ...prev,
+      name: orderTitle,
+      furniture: recalculated
+    }));
+    setActiveTab('3d');
+    showToast(`Projeto técnico gerado a partir do pedido do cliente com furações CNC otimizadas!`);
   };
 
   // Export CSV shortcut
@@ -353,6 +392,10 @@ export default function App() {
             }}
             onLoadTemplate={handleLoadTemplate}
             onApplyAICommand={handleApplyAICommand}
+            onOpenSaveModelModal={() => setIsSaveModelModalOpen(true)}
+            onOpenOrderModal={() => setIsOrderModalOpen(true)}
+            onOpenPiecesListModal={() => setIsPiecesListModalOpen(true)}
+            onStartFromScratch={() => setIsNewProjectModalOpen(true)}
           />
         )}
 
@@ -521,6 +564,14 @@ export default function App() {
             <div className="w-full h-full">
               <DrillingsTab
                 pieces={project.furniture.pieces}
+                furniture={project.furniture}
+                onUpdateDrillingConfig={newConfig => {
+                  updateFurniture({
+                    ...project.furniture,
+                    drillingConfig: newConfig
+                  });
+                  showToast('Padrão de furação atualizado com sucesso.');
+                }}
                 onSelectPiece={piece => {
                   setSelectedPieceId(piece.id);
                   setActiveTab('3d');
@@ -633,9 +684,17 @@ export default function App() {
         isNew={true}
         onClose={() => setIsNewProjectModalOpen(false)}
         project={project}
-        onSave={(updated, templateId) => {
-          const tmpl = FURNITURE_TEMPLATES.find(t => t.id === templateId) || FURNITURE_TEMPLATES[0];
-          const initialFurn = tmpl.create();
+        onOpenOrderModal={() => setIsOrderModalOpen(true)}
+        onOpenPiecesListModal={() => setIsPiecesListModalOpen(true)}
+        onSave={(updated, templateId, customFurniture) => {
+          let initialFurn: FurnitureModel;
+          if (customFurniture) {
+            initialFurn = recalculateFurnitureModel(customFurniture);
+          } else {
+            const tmpl = FURNITURE_TEMPLATES.find(t => t.id === templateId) || FURNITURE_TEMPLATES[0];
+            initialFurn = tmpl.create();
+          }
+
           const newProj: Project = {
             id: `proj_${Date.now()}`,
             name: updated.name || 'Novo Projeto Planejado',
@@ -657,6 +716,28 @@ export default function App() {
           setUndoStack([]);
           setRedoStack([]);
           showToast(`Projeto "${newProj.name}" iniciado.`);
+        }}
+      />
+
+      <CreateFromPiecesListModal
+        isOpen={isPiecesListModalOpen}
+        onClose={() => setIsPiecesListModalOpen(false)}
+        materials={materials}
+        onGenerateModel={handleGenerateFromPiecesList}
+      />
+
+      <CreateFromClientOrderModal
+        isOpen={isOrderModalOpen}
+        onClose={() => setIsOrderModalOpen(false)}
+        onGenerateModel={handleGenerateFromOrder}
+      />
+
+      <SaveModelModal
+        isOpen={isSaveModelModalOpen}
+        onClose={() => setIsSaveModelModalOpen(false)}
+        furniture={project.furniture}
+        onSaved={saved => {
+          showToast(`Modelo "${saved.name}" salvo com sucesso na biblioteca!`);
         }}
       />
     </div>

@@ -1,23 +1,27 @@
 /**
  * MarcenariaCAD Pro - Left Sidebar
- * Tabbed navigation for Component Library/Templates, Pieces Tree,
- * Materials Catalog, Hardware Schedule, and AI Quick Commands.
+ * Tabbed navigation for Component Library/Templates (Standard & Custom Saved Models),
+ * Pieces Tree, Materials Catalog, Hardware Schedule, and AI Quick Commands.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FurnitureModel, Piece } from '../../types/furniture';
 import { BoardMaterial } from '../../types/materials';
 import { FURNITURE_TEMPLATES, FurnitureTemplate } from '../../data/templates';
-import { DEFAULT_HARDWARE_CATALOG } from '../../data/defaultHardware';
+import { loadCustomTemplates, deleteCustomTemplate, StoredCustomTemplate } from '../../services/storage';
 import {
   Library,
   Layers,
   Palette,
-  Wrench,
   Sparkles,
   ChevronRight,
   Send,
-  Check
+  BookmarkPlus,
+  PlusSquare,
+  FileSpreadsheet,
+  MessageSquareText,
+  Trash2,
+  Bookmark
 } from 'lucide-react';
 
 interface LeftSidebarProps {
@@ -25,8 +29,12 @@ interface LeftSidebarProps {
   materials: BoardMaterial[];
   selectedPieceId?: string | null;
   onSelectPiece: (piece: Piece) => void;
-  onLoadTemplate: (template: FurnitureTemplate) => void;
+  onLoadTemplate: (template: FurnitureTemplate | StoredCustomTemplate) => void;
   onApplyAICommand: (command: string) => void;
+  onOpenSaveModelModal?: () => void;
+  onOpenOrderModal?: () => void;
+  onOpenPiecesListModal?: () => void;
+  onStartFromScratch?: () => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -35,10 +43,32 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   selectedPieceId,
   onSelectPiece,
   onLoadTemplate,
-  onApplyAICommand
+  onApplyAICommand,
+  onOpenSaveModelModal,
+  onOpenOrderModal,
+  onOpenPiecesListModal,
+  onStartFromScratch
 }) => {
-  const [activeTab, setActiveTab] = useState<'library' | 'pieces' | 'materials' | 'hardware' | 'ai_chat'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'pieces' | 'materials' | 'ai_chat'>('library');
+  const [libraryFilter, setLibraryFilter] = useState<'all' | 'standard' | 'custom'>('all');
+  const [customTemplates, setCustomTemplates] = useState<StoredCustomTemplate[]>([]);
   const [chatInput, setChatInput] = useState('');
+
+  const refreshCustomTemplates = () => {
+    setCustomTemplates(loadCustomTemplates());
+  };
+
+  useEffect(() => {
+    refreshCustomTemplates();
+  }, [activeTab]);
+
+  const handleDeleteCustom = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm('Deseja excluir este modelo salvo da biblioteca?')) {
+      deleteCustomTemplate(id);
+      refreshCustomTemplates();
+    }
+  };
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +86,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           className={`flex-1 py-1.5 rounded-md font-medium text-center transition-colors flex items-center justify-center gap-1 ${
             activeTab === 'library' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Biblioteca de Templates"
+          title="Biblioteca de Modelos Paramétricos"
         >
           <Library className="w-3.5 h-3.5" />
           Modelos
@@ -66,7 +96,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           className={`flex-1 py-1.5 rounded-md font-medium text-center transition-colors flex items-center justify-center gap-1 ${
             activeTab === 'pieces' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Árvore de Peças"
+          title="Árvore de Peças Estruturais"
         >
           <Layers className="w-3.5 h-3.5" />
           Peças ({furniture.pieces.length})
@@ -76,7 +106,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           className={`flex-1 py-1.5 rounded-md font-medium text-center transition-colors flex items-center justify-center gap-1 ${
             activeTab === 'materials' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Catálogo de Materiais"
+          title="Catálogo de Chapas"
         >
           <Palette className="w-3.5 h-3.5" />
           Chapas
@@ -86,7 +116,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           className={`flex-1 py-1.5 rounded-md font-medium text-center transition-colors flex items-center justify-center gap-1 ${
             activeTab === 'ai_chat' ? 'bg-amber-500/20 text-amber-300 font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Comandos por IA"
+          title="Comandos Paramétricos por IA"
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
           IA
@@ -98,35 +128,155 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         {/* 1. LIBRARY OF TEMPLATES */}
         {activeTab === 'library' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-slate-400 text-[11px] mb-1">
-              <span>TEMPLATES PARAMÉTRICOS</span>
-              <span>{FURNITURE_TEMPLATES.length} itens</span>
-            </div>
-            {FURNITURE_TEMPLATES.map(tmpl => (
-              <div
-                key={tmpl.id}
-                onClick={() => onLoadTemplate(tmpl)}
-                className="p-3 rounded-lg bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/60 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="font-semibold text-white group-hover:text-amber-400 transition-colors">
-                    {tmpl.name}
-                  </h4>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
-                    {tmpl.category}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 line-clamp-2 mb-2">
-                  {tmpl.description}
-                </p>
-                <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
-                  <span>{tmpl.dimensions.width} x {tmpl.dimensions.height} x {tmpl.dimensions.depth} mm</span>
-                  <span className="text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    Carregar <ChevronRight className="w-3 h-3" />
-                  </span>
-                </div>
+            {/* Action Bar: Save current model & Create buttons */}
+            <div className="space-y-1.5 pb-2 border-b border-slate-800">
+              {onOpenSaveModelModal && (
+                <button
+                  onClick={onOpenSaveModelModal}
+                  className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs transition-all shadow flex items-center justify-center gap-1.5"
+                >
+                  <BookmarkPlus className="w-4 h-4" />
+                  <span>Salvar Modelo Atual na Biblioteca</span>
+                </button>
+              )}
+
+              <div className="grid grid-cols-3 gap-1 pt-1 text-[10px]">
+                {onStartFromScratch && (
+                  <button
+                    onClick={onStartFromScratch}
+                    className="p-1.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors flex items-center justify-center gap-1"
+                    title="Iniciar Carcaça do Zero"
+                  >
+                    <PlusSquare className="w-3 h-3 text-amber-400" />
+                    <span>Do Zero</span>
+                  </button>
+                )}
+                {onOpenOrderModal && (
+                  <button
+                    onClick={onOpenOrderModal}
+                    className="p-1.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors flex items-center justify-center gap-1"
+                    title="Criar a partir de Pedido do Cliente"
+                  >
+                    <MessageSquareText className="w-3 h-3 text-amber-400" />
+                    <span>Por Pedido</span>
+                  </button>
+                )}
+                {onOpenPiecesListModal && (
+                  <button
+                    onClick={onOpenPiecesListModal}
+                    className="p-1.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors flex items-center justify-center gap-1"
+                    title="Criar a partir de Lista de Peças"
+                  >
+                    <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+                    <span>Lista Peças</span>
+                  </button>
+                )}
               </div>
-            ))}
+            </div>
+
+            {/* Library Category Filter */}
+            <div className="flex items-center justify-between text-slate-400 text-[11px]">
+              <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <button
+                  onClick={() => setLibraryFilter('all')}
+                  className={`px-2 py-0.5 rounded text-[10px] ${libraryFilter === 'all' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400'}`}
+                >
+                  Todos ({FURNITURE_TEMPLATES.length + customTemplates.length})
+                </button>
+                <button
+                  onClick={() => setLibraryFilter('standard')}
+                  className={`px-2 py-0.5 rounded text-[10px] ${libraryFilter === 'standard' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400'}`}
+                >
+                  Padrão ({FURNITURE_TEMPLATES.length})
+                </button>
+                <button
+                  onClick={() => setLibraryFilter('custom')}
+                  className={`px-2 py-0.5 rounded text-[10px] ${libraryFilter === 'custom' ? 'bg-slate-800 text-amber-400 font-semibold' : 'text-slate-400'}`}
+                >
+                  Meus ({customTemplates.length})
+                </button>
+              </div>
+            </div>
+
+            {/* User Custom Models */}
+            {(libraryFilter === 'all' || libraryFilter === 'custom') && customTemplates.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                  <Bookmark className="w-3 h-3" />
+                  Modelos Personalizados ({customTemplates.length}):
+                </span>
+                {customTemplates.map(tmpl => (
+                  <div
+                    key={tmpl.id}
+                    onClick={() => onLoadTemplate(tmpl)}
+                    className="p-3 rounded-lg bg-amber-950/20 hover:bg-amber-950/30 border border-amber-800/40 hover:border-amber-500/80 transition-all cursor-pointer group relative"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                        {tmpl.name}
+                      </h4>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-300 font-mono">
+                          {tmpl.category}
+                        </span>
+                        <button
+                          onClick={e => handleDeleteCustom(e, tmpl.id)}
+                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                          title="Excluir modelo salvo"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 line-clamp-2 mb-2">
+                      {tmpl.description}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span>{tmpl.dimensions.width} x {tmpl.dimensions.height} x {tmpl.dimensions.depth} mm</span>
+                      <span className="text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                        Carregar <ChevronRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Standard Built-in Templates */}
+            {(libraryFilter === 'all' || libraryFilter === 'standard') && (
+              <div className="space-y-2">
+                {libraryFilter === 'all' && customTemplates.length > 0 && (
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block pt-1">
+                    Modelos Padrão da Fábrica:
+                  </span>
+                )}
+                {FURNITURE_TEMPLATES.map(tmpl => (
+                  <div
+                    key={tmpl.id}
+                    onClick={() => onLoadTemplate(tmpl)}
+                    className="p-3 rounded-lg bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/60 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                        {tmpl.name}
+                      </h4>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                        {tmpl.category}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 line-clamp-2 mb-2">
+                      {tmpl.description}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span>{tmpl.dimensions.width} x {tmpl.dimensions.height} x {tmpl.dimensions.depth} mm</span>
+                      <span className="text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                        Carregar <ChevronRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -155,7 +305,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       <span className="font-medium text-xs truncate max-w-[150px]">{piece.name}</span>
                     </div>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      {piece.length} x {piece.width} x {piece.thickness} mm
+                      {piece.length} x {piece.width} x {piece.thickness} mm · {piece.drillings.length} furos
                     </span>
                   </div>
                   <ChevronRight className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-600'}`} />

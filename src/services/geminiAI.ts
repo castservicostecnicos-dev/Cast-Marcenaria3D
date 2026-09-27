@@ -4,7 +4,6 @@
  * with a high-accuracy fallback NLP parser for offline/direct usage.
  */
 
-import { GoogleGenAI } from '@google/genai';
 import { ParametricInput } from '../engine/parametricEngine';
 import { ModuleStructure } from '../types/furniture';
 
@@ -206,62 +205,60 @@ export function parseFurnitureDescriptionLocally(text: string): InterpretedFurni
 }
 
 /**
- * Interpret with Gemini 3.8 Flash if API key is present, otherwise fallback to Portuguese NLP
+ * Interpret with server-side Gemini 3.8 Flash API with local semantic fallback
  */
 export async function interpretFurnitureWithAI(prompt: string): Promise<InterpretedFurnitureProposal> {
   const localProposal = parseFurnitureDescriptionLocally(prompt);
 
-  const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-                 (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY);
-
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    // Fast reliable local semantic parsing
-    return localProposal;
-  }
-
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: `Você é um engenheiro sênior de móveis planejados e CAD paramétrico.
-Analise a seguinte descrição de um cliente/marceneiro e extraia a estrutura técnica paramétrica precisa em formato JSON:
-
-Descrição: "${prompt}"
-
-Retorne ESTRITAMENTE um objeto JSON válido (sem tags markdown ou texto adicional) com o seguinte esquema:
-{
-  "name": "Nome sugerido para o móvel",
-  "type": "cozinha_aereo" | "cozinha_balcao" | "armario_quarto" | "closet" | "rack_sala" | "banheiro" | "escritorio" | "nicho_livre",
-  "width": número em mm (ex: 2400),
-  "height": número em mm (ex: 2200),
-  "depth": número em mm (ex: 600),
-  "numModules": número de 1 a 6,
-  "doorsCount": número de portas,
-  "drawersCount": número de gavetas,
-  "shelvesCount": número de prateleiras,
-  "carcaseMaterialName": "MDF Branco TX 18mm",
-  "frontMaterialName": "MDF Louro Freijó 18mm" ou o citado,
-  "hasPlinth": true ou false,
-  "hasClothesRail": true ou false,
-  "hasBackPanel": true ou false,
-  "rawExplanation": "Explicação técnica sucinta das escolhas de engenharia"
-}`
+    const res = await fetch('/api/ai/project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const text = response.text || '';
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanJson);
+    if (!res.ok) {
+      return localProposal;
+    }
+
+    const data = await res.json();
+    if (data.useLocalFallback || !data.name) {
+      return localProposal;
+    }
 
     return {
       ...localProposal,
-      ...parsed,
-      suggestedModules: localProposal.suggestedModules, // Keep calculated modules geometry
+      ...data,
+      suggestedModules: localProposal.suggestedModules,
       confidenceScore: 0.98
     };
   } catch (err) {
-    console.warn('Gemini API call returned error, using local parametric parser:', err);
+    console.warn('Endpoint /api/ai/project falhou, usando parser local:', err);
     return localProposal;
   }
+}
+
+/**
+ * Parse raw pieces text (Excel, CSV, Corte Cloud) via server-side Gemini API with local fallback
+ */
+export async function parsePiecesListWithAI(rawText: string): Promise<any[]> {
+  try {
+    const res = await fetch('/api/ai/parse-pieces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rawText })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.pieces) && data.pieces.length > 0) {
+        return data.pieces;
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao chamar /api/ai/parse-pieces:', e);
+  }
+  return [];
 }
 
 /**

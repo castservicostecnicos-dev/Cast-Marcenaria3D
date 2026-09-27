@@ -110,3 +110,52 @@ export function createNewProjectVersion(project: Project, description: string): 
   saveProject(updated);
   return updated;
 }
+
+const STORAGE_KEY_CUSTOM_TEMPLATES = 'marcenariacad_custom_templates_v1';
+
+export interface StoredCustomTemplate {
+  id: string;
+  name: string;
+  category: 'Cozinha' | 'Dormitório' | 'Sala' | 'Banheiro' | 'Escritório' | 'Personalizado';
+  description: string;
+  thumbnail: string;
+  dimensions: { width: number; height: number; depth: number };
+  furnitureSnapshot: FurnitureModel;
+  createdAt: string;
+}
+
+export function loadCustomTemplates(): StoredCustomTemplate[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CUSTOM_TEMPLATES);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error loading custom templates:', e);
+    return [];
+  }
+}
+
+export function saveCustomTemplate(template: Omit<StoredCustomTemplate, 'id' | 'createdAt'>): StoredCustomTemplate {
+  const list = loadCustomTemplates();
+  const newTmpl: StoredCustomTemplate = {
+    ...template,
+    id: `custom_tmpl_${Date.now()}`,
+    createdAt: new Date().toISOString()
+  };
+  list.unshift(newTmpl);
+  try {
+    localStorage.setItem(STORAGE_KEY_CUSTOM_TEMPLATES, JSON.stringify(list));
+  } catch (e) {
+    console.error('Error saving custom template:', e);
+  }
+  return newTmpl;
+}
+
+export function deleteCustomTemplate(id: string): void {
+  const list = loadCustomTemplates().filter(t => t.id !== id);
+  try {
+    localStorage.setItem(STORAGE_KEY_CUSTOM_TEMPLATES, JSON.stringify(list));
+  } catch (e) {
+    console.error('Error deleting custom template:', e);
+  }
+}

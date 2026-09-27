@@ -21,6 +21,7 @@ export interface EdgeBandingConfig {
 
 export type HoleType = 
   | 'system32'         // 5mm shelf pin / runner hole, prof. 12mm
+  | 'shelf_pin'        // 5mm shelf support pin hole (cluster 3/5 holes)
   | 'hinge_cup'        // 35mm cup hole, prof. 12.5mm
   | 'hinge_screw'      // 2mm pilot or 5mm euro screw
   | 'minifix_cam'      // 15mm cam housing, prof. 12mm
@@ -175,9 +176,16 @@ export interface FurnitureModel {
   hardwareSpecs: {
     hingeType: 'straight' | 'half_cranked' | 'full_cranked' | 'soft_close';
     slideType: 'telescopic' | 'undermount_soft_close';
-    connectorType: 'minifix_dowel' | 'confirmat' | 'screw';
+    connectorType: 'minifix_clean' | 'confirmat' | 'minifix_dowel' | 'screw';
     handleType: 'perfil_gola' | 'handle_bar_black' | 'handle_bar_inox' | 'handle_knob' | 'cava';
     shelfPinType: 'pin_5mm_nickel';
+  };
+
+  drillingConfig?: {
+    connectorType: 'minifix_clean' | 'confirmat' | 'minifix_dowel' | 'screw';
+    shelfDrillingMode: 'exact_nominal' | 'cluster_3' | 'none';
+    hingePlateMode: 'standard_2hole' | 'pilot_1hole' | 'none';
+    slideDrillingMode: 'standard_2hole' | 'none';
   };
   
   modules: ModuleStructure[];

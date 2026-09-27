@@ -20,7 +20,8 @@ import {
   Eye,
   ArrowLeft,
   RotateCw,
-  DoorOpen
+  DoorOpen,
+  Plus
 } from 'lucide-react';
 
 export type ActiveTab = '3d' | 'cutting_list' | 'cutting_plan' | 'drillings' | 'quotation' | 'validation';
@@ -319,9 +320,11 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           onClick={onNewProject}
-          className="text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded hover:bg-slate-800 transition-colors hidden xl:block"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg text-xs transition-colors border border-slate-700"
+          title="Iniciar novo projeto (do zero, modelo, lista de corte ou descrição)"
         >
-          Novo
+          <Plus className="w-3.5 h-3.5 text-amber-400" />
+          <span>Novo</span>
         </button>
 
         <button

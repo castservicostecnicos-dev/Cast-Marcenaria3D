@@ -4,11 +4,14 @@
  * edge bandings, hardware items and machining operations.
  */
 
-import { FurnitureModel, ModuleStructure, Piece, HardwareItem, EdgeBandingConfig } from '../types/furniture';
+import { FurnitureModel, ModuleStructure, Piece, HardwareItem, EdgeBandingConfig, DrillingOperation } from '../types/furniture';
 import { DEFAULT_HARDWARE_CATALOG } from '../data/defaultHardware';
 import {
   generateDoorHingeDrillings,
-  generateSystem32LineBore,
+  generateHingePlateDrillings,
+  generateDrawerSlideDrillings,
+  generateShelfSupportDrillings,
+  generateCarcaseStructuralDrillings,
   generateMinifixJointDrillings,
   generateBackGrooveSlot,
   calculateHingePositions
@@ -30,6 +33,7 @@ export interface ParametricInput {
   plinthHeight?: number;
   modules?: ModuleStructure[];
   hardwareSpecs?: FurnitureModel['hardwareSpecs'];
+  drillingConfig?: FurnitureModel['drillingConfig'];
 }
 
 export function createDefaultEdgeBanding(tapeId: string, thickness: number = 1.0, isDoor: boolean = false): EdgeBandingConfig {
@@ -92,14 +96,84 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
     }
   }
 
-  // 1. CARCASE LATERALS (Lateral Esquerda e Lateral Direita)
-  // Height = total height (or total height - plinth if plinth is separate)
+  // Dimensions calculations
   const lateralHeight = height;
   const lateralDepth = depth;
-
-  // Lateral Esquerda
-  const lateralLeftDrillings = generateSystem32LineBore(lateralHeight, lateralDepth, plinthHeight + 80, 80);
+  const interiorWidth = width - 2 * carcaseThickness;
+  const interiorHeight = height - plinthHeight - 2 * carcaseThickness;
+  const horizontalDepth = lateralDepth;
   const backGroove = generateBackGrooveSlot(lateralDepth, lateralHeight, backThickness, backGrooveOffset);
+
+  const numModules = model.modules.length > 0 ? model.modules.length : 1;
+  const numDividers = numModules - 1;
+  const totalDividersThickness = numDividers * carcaseThickness;
+  const totalUsableWidth = interiorWidth - totalDividersThickness;
+  const moduleSpanWidth = totalUsableWidth / numModules;
+
+  // Maximum allowed drawer slide length
+  const maxAllowedSlide = Math.max(250, Math.floor((horizontalDepth - 50) / 50) * 50);
+  const drawerSlideLength = Math.min(500, maxAllowedSlide);
+  const doorHeightTotal = interiorHeight - doorGap * 2;
+  const doorY = plinthHeight + carcaseThickness + doorGap;
+
+  // Drilling engine configuration (Promob / Corte Cloud Clean Standard)
+  const dConfig = model.drillingConfig || {
+    connectorType: model.hardwareSpecs?.connectorType || 'minifix_clean',
+    shelfDrillingMode: 'exact_nominal',
+    hingePlateMode: 'standard_2hole',
+    slideDrillingMode: 'standard_2hole'
+  };
+
+  // Helper: drawer slide heights (absolute Y from carcase bottom)
+  const getDrawerSlideHeights = (mod: ModuleStructure) => {
+    if (!mod || mod.numDrawers <= 0) return [];
+    const isDedicated = mod.doorsType === 'none' && mod.numShelves === 0;
+    const dHeightTotal = isDedicated ? (interiorHeight - doorGap * 2) : (interiorHeight * 0.55);
+    const sFrontH = Math.round((dHeightTotal - (mod.numDrawers - 1) * doorGap) / mod.numDrawers);
+    const heights: number[] = [];
+    for (let d = 0; d < mod.numDrawers; d++) {
+      const frontY = plinthHeight + carcaseThickness + doorGap + d * (sFrontH + doorGap);
+      const boxY = frontY + 15;
+      heights.push(boxY + 25);
+    }
+    return heights;
+  };
+
+  // Helper: shelf heights (absolute Y from carcase bottom)
+  const getShelfHeights = (mod: ModuleStructure) => {
+    if (!mod || mod.numShelves <= 0) return [];
+    const spacing = interiorHeight / (mod.numShelves + 1);
+    const heights: number[] = [];
+    for (let s = 1; s <= mod.numShelves; s++) {
+      heights.push(plinthHeight + carcaseThickness + s * spacing);
+    }
+    return heights;
+  };
+
+  // 1. CARCASE LATERALS (Lateral Esquerda e Lateral Direita)
+  // Lateral Esquerda: structural base/top holes + features of Module 0
+  const firstMod = model.modules[0];
+  const lateralLeftDrillings: DrillingOperation[] = [
+    ...generateCarcaseStructuralDrillings(
+      lateralDepth,
+      plinthHeight + carcaseThickness / 2,
+      lateralHeight - carcaseThickness / 2,
+      'right',
+      'lat_esq',
+      dConfig.connectorType
+    )
+  ];
+  if (firstMod) {
+    if (firstMod.doorsType === 'single_left' || firstMod.doorsType === 'double') {
+      lateralLeftDrillings.push(...generateHingePlateDrillings(doorHeightTotal, doorY, 'right', 'lat_esq', dConfig.hingePlateMode));
+    }
+    if (firstMod.numDrawers > 0) {
+      lateralLeftDrillings.push(...generateDrawerSlideDrillings(getDrawerSlideHeights(firstMod), drawerSlideLength, 'right', 'lat_esq', dConfig.slideDrillingMode));
+    }
+    if (firstMod.numShelves > 0) {
+      lateralLeftDrillings.push(...generateShelfSupportDrillings(getShelfHeights(firstMod), lateralDepth, firstMod.shelfType, 'right', 'lat_esq', dConfig.shelfDrillingMode));
+    }
+  }
 
   pieces.push({
     id: 'pc_lat_esq',
@@ -134,10 +208,33 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
       height: lateralHeight,
       depth: lateralDepth
     },
-    notes: 'Lateral externa com furação Sistema 32 e canal traseiro'
+    notes: 'Lateral externa esquerda com furações CNC precisas e canal traseiro'
   });
 
-  // Lateral Direita
+  // Lateral Direita: structural base/top holes + features of last Module
+  const lastMod = model.modules[model.modules.length - 1];
+  const lateralRightDrillings: DrillingOperation[] = [
+    ...generateCarcaseStructuralDrillings(
+      lateralDepth,
+      plinthHeight + carcaseThickness / 2,
+      lateralHeight - carcaseThickness / 2,
+      'left',
+      'lat_dir',
+      dConfig.connectorType
+    )
+  ];
+  if (lastMod) {
+    if (lastMod.doorsType === 'single_right' || lastMod.doorsType === 'double') {
+      lateralRightDrillings.push(...generateHingePlateDrillings(doorHeightTotal, doorY, 'left', 'lat_dir', dConfig.hingePlateMode));
+    }
+    if (lastMod.numDrawers > 0) {
+      lateralRightDrillings.push(...generateDrawerSlideDrillings(getDrawerSlideHeights(lastMod), drawerSlideLength, 'left', 'lat_dir', dConfig.slideDrillingMode));
+    }
+    if (lastMod.numShelves > 0) {
+      lateralRightDrillings.push(...generateShelfSupportDrillings(getShelfHeights(lastMod), lateralDepth, lastMod.shelfType, 'left', 'lat_dir', dConfig.shelfDrillingMode));
+    }
+  }
+
   pieces.push({
     id: 'pc_lat_dir',
     code: 'LAT-DIR',
@@ -159,7 +256,7 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
       tapeThickness: 1.0,
       tapeWidth: 22
     },
-    drillings: generateSystem32LineBore(lateralHeight, lateralDepth, plinthHeight + 80, 80),
+    drillings: lateralRightDrillings,
     slots: [backGroove],
     position: {
       x: width - carcaseThickness,
@@ -171,16 +268,13 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
       height: lateralHeight,
       depth: lateralDepth
     },
-    notes: 'Lateral externa direita com furação Sistema 32'
+    notes: 'Lateral externa direita com furações CNC precisas e canal traseiro'
   });
 
   // 2. BASE & TAMPO (Top and Bottom Panels)
-  // Interior width between outer laterals
-  const interiorWidth = width - 2 * carcaseThickness;
-  const horizontalDepth = lateralDepth; // or lateralDepth - backGrooveOffset if applied
 
   // Base
-  const baseDrillings = generateMinifixJointDrillings(interiorWidth, horizontalDepth);
+  const baseDrillings = generateMinifixJointDrillings(interiorWidth, horizontalDepth, dConfig.connectorType);
   pieces.push({
     id: 'pc_base',
     code: 'BAS-INF',
@@ -239,7 +333,7 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
       tapeThickness: 1.0,
       tapeWidth: 22
     },
-    drillings: generateMinifixJointDrillings(interiorWidth, horizontalDepth),
+    drillings: generateMinifixJointDrillings(interiorWidth, horizontalDepth, dConfig.connectorType),
     slots: [backGroove],
     position: {
       x: carcaseThickness,
@@ -302,13 +396,6 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
   }
 
   // 4. MODULES & DIVIDERS
-  const numModules = model.modules.length > 0 ? model.modules.length : 1;
-  const interiorHeight = height - plinthHeight - 2 * carcaseThickness;
-  const numDividers = numModules - 1;
-  const totalDividersThickness = numDividers * carcaseThickness;
-  const totalUsableWidth = interiorWidth - totalDividersThickness;
-  const moduleSpanWidth = totalUsableWidth / numModules;
-
   let currentOffsetX = carcaseThickness;
 
   model.modules.forEach((mod, modIdx) => {
@@ -860,6 +947,64 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
 
     // Add Vertical Divider between modules
     if (modIdx < numDividers) {
+      const nextMod = model.modules[modIdx + 1];
+      const dividerDrillings: DrillingOperation[] = [];
+      const divDepth = horizontalDepth - 10;
+
+      // 1. Structural connection holes (Bottom & Top to Base & Tampo)
+      [50, divDepth - 50].forEach((dx, dxi) => {
+        dividerDrillings.push({
+          id: `drill_div_${modIdx}_base_${dxi}`,
+          name: `Cavilha/Parafuso Base Div #${modIdx + 1}`,
+          type: 'dowel',
+          diameter: 8,
+          depth: 15,
+          isThrough: false,
+          x: dx,
+          y: 15,
+          face: 'bottom'
+        });
+        dividerDrillings.push({
+          id: `drill_div_${modIdx}_top_${dxi}`,
+          name: `Cavilha/Parafuso Tampo Div #${modIdx + 1}`,
+          type: 'dowel',
+          diameter: 8,
+          depth: 15,
+          isThrough: false,
+          x: dx,
+          y: interiorHeight - 15,
+          face: 'top'
+        });
+      });
+
+      // 2. Left face of divider (facing module `modIdx`)
+      if (mod.doorsType === 'single_right' || mod.doorsType === 'double') {
+        dividerDrillings.push(...generateHingePlateDrillings(doorHeightTotal, doorGap, 'left', `div_${modIdx}_l`, dConfig.hingePlateMode));
+      }
+      if (mod.numDrawers > 0) {
+        const slideHeightsOnDivider = getDrawerSlideHeights(mod).map(h => h - (plinthHeight + carcaseThickness));
+        dividerDrillings.push(...generateDrawerSlideDrillings(slideHeightsOnDivider, drawerSlideLength, 'left', `div_${modIdx}_l`, dConfig.slideDrillingMode));
+      }
+      if (mod.numShelves > 0) {
+        const shelfHeightsOnDivider = getShelfHeights(mod).map(h => h - (plinthHeight + carcaseThickness));
+        dividerDrillings.push(...generateShelfSupportDrillings(shelfHeightsOnDivider, divDepth, mod.shelfType, 'left', `div_${modIdx}_l`, dConfig.shelfDrillingMode));
+      }
+
+      // 3. Right face of divider (facing module `modIdx + 1`)
+      if (nextMod) {
+        if (nextMod.doorsType === 'single_left' || nextMod.doorsType === 'double') {
+          dividerDrillings.push(...generateHingePlateDrillings(doorHeightTotal, doorGap, 'right', `div_${modIdx}_r`, dConfig.hingePlateMode));
+        }
+        if (nextMod.numDrawers > 0) {
+          const slideHeightsOnDivider = getDrawerSlideHeights(nextMod).map(h => h - (plinthHeight + carcaseThickness));
+          dividerDrillings.push(...generateDrawerSlideDrillings(slideHeightsOnDivider, drawerSlideLength, 'right', `div_${modIdx}_r`, dConfig.slideDrillingMode));
+        }
+        if (nextMod.numShelves > 0) {
+          const shelfHeightsOnDivider = getShelfHeights(nextMod).map(h => h - (plinthHeight + carcaseThickness));
+          dividerDrillings.push(...generateShelfSupportDrillings(shelfHeightsOnDivider, divDepth, nextMod.shelfType, 'right', `div_${modIdx}_r`, dConfig.shelfDrillingMode));
+        }
+      }
+
       pieces.push({
         id: `pc_div_${modIdx}`,
         code: `DIV-${modIdx + 1}`,
@@ -869,7 +1014,7 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
         materialId: carcaseMaterialId,
         thickness: carcaseThickness,
         length: interiorHeight,
-        width: horizontalDepth - 10,
+        width: divDepth,
         quantity: 1,
         grain: 'vertical',
         edgeBanding: {
@@ -881,7 +1026,7 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
           tapeThickness: 1.0,
           tapeWidth: 22
         },
-        drillings: generateSystem32LineBore(interiorHeight, horizontalDepth - 10, 50, 50),
+        drillings: dividerDrillings,
         slots: [backGroove],
         position: {
           x: currentOffsetX,
@@ -891,7 +1036,7 @@ export function recalculateFurnitureModel(model: FurnitureModel): FurnitureModel
         dimensions3D: {
           width: carcaseThickness,
           height: interiorHeight,
-          depth: horizontalDepth - 10
+          depth: divDepth
         }
       });
 
@@ -1009,10 +1154,16 @@ export function createParametricFurniture(input: ParametricInput): FurnitureMode
     backGrooveOffset: 15,
     doorGap: 2,
     drawerRunnerClearance: 26,
+    drillingConfig: input.drillingConfig || {
+      connectorType: 'minifix_clean',
+      shelfDrillingMode: 'exact_nominal',
+      hingePlateMode: 'standard_2hole',
+      slideDrillingMode: 'standard_2hole'
+    },
     hardwareSpecs: input.hardwareSpecs || {
       hingeType: 'straight',
       slideType: 'telescopic',
-      connectorType: 'minifix_dowel',
+      connectorType: 'minifix_clean',
       handleType: 'handle_bar_black',
       shelfPinType: 'pin_5mm_nickel'
     },

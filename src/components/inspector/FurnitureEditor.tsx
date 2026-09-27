@@ -20,7 +20,10 @@ import {
   Copy,
   ChevronRight,
   Filter,
-  Eye
+  Eye,
+  Cpu,
+  CheckCircle2,
+  ShieldCheck
 } from 'lucide-react';
 
 interface FurnitureEditorProps {
@@ -40,11 +43,27 @@ export const FurnitureEditor: React.FC<FurnitureEditorProps> = ({
   selectedPieceId,
   onSelectPiece
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'params' | 'edge_banding'>('params');
+  const [activeSubTab, setActiveSubTab] = useState<'params' | 'drilling' | 'edge_banding'>('params');
   const [pieceFilterCategory, setPieceFilterCategory] = useState<string>('all');
   const [activePieceId, setActivePieceId] = useState<string>(() => {
     return selectedPieceId || furniture.pieces[0]?.id || '';
   });
+
+  const handleDrillingConfigChange = (partial: Partial<NonNullable<FurnitureModel['drillingConfig']>>) => {
+    const current = furniture.drillingConfig || {
+      connectorType: 'minifix_clean',
+      shelfDrillingMode: 'exact_nominal',
+      hingePlateMode: 'standard_2hole',
+      slideDrillingMode: 'standard_2hole'
+    };
+    onChange({
+      ...furniture,
+      drillingConfig: {
+        ...current,
+        ...partial
+      }
+    });
+  };
 
   // Keep activePieceId in sync if selectedPieceId changes from external click
   React.useEffect(() => {
@@ -456,10 +475,10 @@ export const FurnitureEditor: React.FC<FurnitureEditorProps> = ({
         </div>
 
         {/* Tab Buttons */}
-        <div className="grid grid-cols-2 p-1 bg-slate-900 rounded-lg border border-slate-800 text-xs">
+        <div className="grid grid-cols-3 p-1 bg-slate-900 rounded-lg border border-slate-800 text-xs">
           <button
             onClick={() => setActiveSubTab('params')}
-            className={`py-1.5 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-1.5 px-2 rounded-md font-medium transition-all flex items-center justify-center gap-1 ${
               activeSubTab === 'params'
                 ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-white'
@@ -469,20 +488,26 @@ export const FurnitureEditor: React.FC<FurnitureEditorProps> = ({
             Parâmetros
           </button>
           <button
+            onClick={() => setActiveSubTab('drilling')}
+            className={`py-1.5 px-2 rounded-md font-medium transition-all flex items-center justify-center gap-1 ${
+              activeSubTab === 'drilling'
+                ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            Furação CNC
+          </button>
+          <button
             onClick={() => setActiveSubTab('edge_banding')}
-            className={`py-1.5 px-3 rounded-md font-medium transition-all flex items-center justify-center gap-1.5 relative ${
+            className={`py-1.5 px-2 rounded-md font-medium transition-all flex items-center justify-center gap-1 relative ${
               activeSubTab === 'edge_banding'
                 ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Scissors className="w-3.5 h-3.5" />
-            Fitas de Borda
-            <span className={`text-[10px] px-1 rounded font-mono ml-0.5 ${
-              activeSubTab === 'edge_banding' ? 'bg-slate-950 text-amber-400 font-bold' : 'bg-slate-800 text-slate-300'
-            }`}>
-              {totalMeters}m
-            </span>
+            Fitas
           </button>
         </div>
       </div>
@@ -708,7 +733,189 @@ export const FurnitureEditor: React.FC<FurnitureEditorProps> = ({
         </div>
       )}
 
-      {/* SUB-TAB 2: CONFIGURADOR MANUAL DE FITAS DE BORDA (Face a Face) */}
+      {/* SUB-TAB 2: CONFIGURAÇÃO DO MOTOR DE FURAÇÃO CNC */}
+      {activeSubTab === 'drilling' && (
+        <div className="flex-1 p-4 overflow-y-auto space-y-5 text-xs">
+          {/* Header Banner */}
+          <div className="p-3 bg-gradient-to-r from-emerald-950/70 to-slate-900 rounded-xl border border-emerald-800/40">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <h4 className="font-semibold text-white text-xs">Motor de Furação CNC Limpa</h4>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono ml-auto">
+                Promob / Corte Cloud
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              O motor elimina furos fantasmas e perfurações contínuas desnecessárias. As laterais e divisórias recebem apenas os furos essenciais correspondentes às uniões, corrediças, dobradiças e prateleiras reais.
+            </p>
+          </div>
+
+          {/* Presets Rápidos */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block mb-2">
+              Presets Rápidos de Produção
+            </label>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={() => handleDrillingConfigChange({
+                  connectorType: 'minifix_clean',
+                  shelfDrillingMode: 'exact_nominal',
+                  hingePlateMode: 'standard_2hole',
+                  slideDrillingMode: 'standard_2hole'
+                })}
+                className={`p-2.5 rounded-lg border text-left transition-all ${
+                  (furniture.drillingConfig?.connectorType || 'minifix_clean') === 'minifix_clean' &&
+                  (furniture.drillingConfig?.shelfDrillingMode || 'exact_nominal') === 'exact_nominal'
+                    ? 'bg-emerald-950/60 border-emerald-500/50 text-white shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between font-semibold text-xs text-emerald-400">
+                  <span>Padrão Marcenaria Limpa (Recomendado)</span>
+                  <Check className="w-3.5 h-3.5" />
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  2 furos por união estrutural (50mm da frente e fundo) · 2 furos por prateleira · 2 furos por calço · Laterais com apenas ~10 furos
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleDrillingConfigChange({
+                  connectorType: 'confirmat',
+                  shelfDrillingMode: 'exact_nominal',
+                  hingePlateMode: 'standard_2hole',
+                  slideDrillingMode: 'standard_2hole'
+                })}
+                className={`p-2.5 rounded-lg border text-left transition-all ${
+                  furniture.drillingConfig?.connectorType === 'confirmat'
+                    ? 'bg-amber-950/60 border-amber-500/50 text-white shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between font-semibold text-xs text-amber-400">
+                  <span>Padrão Parafuso Confirmat / Soberba</span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Furos passantes Ø5mm para parafusos estruturais Soberba 7x50 nas bases e tampos
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleDrillingConfigChange({
+                  connectorType: 'screw',
+                  shelfDrillingMode: 'exact_nominal',
+                  hingePlateMode: 'standard_2hole',
+                  slideDrillingMode: 'standard_2hole'
+                })}
+                className={`p-2.5 rounded-lg border text-left transition-all ${
+                  furniture.drillingConfig?.connectorType === 'screw'
+                    ? 'bg-cyan-950/60 border-cyan-500/50 text-white shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between font-semibold text-xs text-cyan-400">
+                  <span>Montagem Manual (Chapa Externa Virgem)</span>
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Laterais externas sem furos de fixação de topo/base (preserva o MDF 100% liso para montagem na bancada)
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Configurações Detalhadas */}
+          <div className="space-y-3.5 pt-2 border-t border-slate-800">
+            <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
+              Parâmetros Individuais de Furação
+            </label>
+
+            {/* 1. União Estrutural */}
+            <div>
+              <span className="text-slate-400 block mb-1">União Estrutural (Laterais / Tampo / Base):</span>
+              <select
+                value={furniture.drillingConfig?.connectorType || 'minifix_clean'}
+                onChange={e => handleDrillingConfigChange({ connectorType: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-400"
+              >
+                <option value="minifix_clean">Minifix Limpo (2 furos por união: 50mm frente, 50mm fundo) [Recomendado]</option>
+                <option value="confirmat">Parafuso Confirmat / Soberba (2 furos por união)</option>
+                <option value="minifix_dowel">Minifix + Cavilha Central de Alinhamento</option>
+                <option value="screw">Sem Furo Estrutural na Lateral Externa (Peça Virgem)</option>
+              </select>
+            </div>
+
+            {/* 2. Prateleiras */}
+            <div>
+              <span className="text-slate-400 block mb-1">Furação de Prateleiras Móveis:</span>
+              <select
+                value={furniture.drillingConfig?.shelfDrillingMode || 'exact_nominal'}
+                onChange={e => handleDrillingConfigChange({ shelfDrillingMode: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-400"
+              >
+                <option value="exact_nominal">Furação Pontual Precisa (2 pinos por prateleira - sem furos vazios) [Recomendado]</option>
+                <option value="cluster_3">Cremalheira Regulável (3 furos passo 32mm: -32mm, 0, +32mm)</option>
+                <option value="none">Sem Furação de Prateleira na CNC (suporte manual)</option>
+              </select>
+            </div>
+
+            {/* 3. Calços de Dobradiça */}
+            <div>
+              <span className="text-slate-400 block mb-1">Calços de Dobradiça (Nas Laterais/Divisórias com Porta):</span>
+              <select
+                value={furniture.drillingConfig?.hingePlateMode || 'standard_2hole'}
+                onChange={e => handleDrillingConfigChange({ hingePlateMode: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-400"
+              >
+                <option value="standard_2hole">Calço 2 Furos (Ø5mm a 37mm, passo 32mm) [Recomendado]</option>
+                <option value="pilot_1hole">Furo Guia Central (Ø2.5mm x 10mm)</option>
+                <option value="none">Sem Furação na Lateral (parafuso direto 3.5x16mm na montagem)</option>
+              </select>
+            </div>
+
+            {/* 4. Corrediças */}
+            <div>
+              <span className="text-slate-400 block mb-1">Corrediças Telescópicas de Gaveta:</span>
+              <select
+                value={furniture.drillingConfig?.slideDrillingMode || 'standard_2hole'}
+                onChange={e => handleDrillingConfigChange({ slideDrillingMode: e.target.value as any })}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-400"
+              >
+                <option value="standard_2hole">2 Furos por Corrediça (37mm frontal + traseiro) [Recomendado]</option>
+                <option value="none">Sem Furação de Corrediça (montagem com gabarito na fábrica)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Auditoria das Laterais */}
+          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+              <span className="flex items-center gap-1.5 text-amber-400 font-mono">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                AUDITORIA DE FURAÇÕES DAS PEÇAS
+              </span>
+            </div>
+
+            <div className="space-y-1.5 text-[11px] font-mono">
+              {furniture.pieces
+                .filter(p => p.type === 'lateral_left' || p.type === 'lateral_right' || p.type === 'divider_vertical' || p.type === 'door')
+                .map(p => (
+                  <div key={p.id} className="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800/80">
+                    <span className="text-slate-300 font-semibold">{p.code} ({p.name})</span>
+                    <span className="text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-800/50">
+                      {p.drillings.length} furos CNC
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            <p className="text-[10px] text-slate-400 pt-1">
+              Peças virgens preservadas sem furos: Fundo 6mm (0 furos), Rodapé (0 furos), Prateleiras soltas (0 furos).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 3: CONFIGURADOR MANUAL DE FITAS DE BORDA (Face a Face) */}
       {activeSubTab === 'edge_banding' && (
         <div className="flex-1 p-4 overflow-y-auto space-y-4 text-xs">
           {/* Metrics & Total Consumption Banner */}

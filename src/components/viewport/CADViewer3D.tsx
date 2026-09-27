@@ -622,8 +622,10 @@ export const CADViewer3D: React.FC<CADViewer3DProps> = ({
             drillMesh.rotation.z = Math.PI / 2;
             drillingsGroupRef.current?.add(drillMesh);
           } else if (piece.type === 'divider_vertical') {
-            // Divider holes in center / faces
-            const holeX = posX;
+            // Divider holes on faces (left face or right face)
+            const holeX = d.face === 'left' 
+              ? posX - dims.width / 2 
+              : (d.face === 'right' ? posX + dims.width / 2 : posX);
             const holeY = (posY - dims.height / 2) + d.y;
             const holeZ = (posZ + dims.depth / 2) - d.x;
             drillMesh.position.set(holeX, holeY, holeZ);
